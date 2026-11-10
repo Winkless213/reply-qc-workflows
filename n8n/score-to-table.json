@@ -1,0 +1,727 @@
+{
+  "id": "rqcScoreToTable1",
+  "name": "回复质检 · 评分入表",
+  "nodes": [
+    {
+      "id": "5d3b9e20-0001-4c2a-9f61-7a8b0c1d0001",
+      "name": "收到对话（webhook）",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reply-qc",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "2b7c5e1a-9d40-4f3e-8a6b-0c1d2e3f4a5b",
+      "notes": "POST 一段对话、对话数组或 {conversations: [...]}，立即返回，评分在后台跑。"
+    },
+    {
+      "id": "5d3b9e20-0002-4c2a-9f61-7a8b0c1d0002",
+      "name": "每 30 分钟查收件箱",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        260
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d3b9e20-0003-4c2a-9f61-7a8b0c1d0003",
+      "name": "读收件箱文件",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        260
+      ],
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/home/node/.n8n-files/inbox/*.json",
+        "options": {}
+      },
+      "onError": "continueErrorOutput",
+      "notes": "对应宿主机 infra/n8n/files/inbox/。文件不用挪走：内容没变的对话会被去重跳过。收件箱为空时本节点报 No file(s) found，走错误出口。"
+    },
+    {
+      "id": "5d3b9e20-0004-4c2a-9f61-7a8b0c1d0004",
+      "name": "只是收件箱为空吗",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        480
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+              "leftValue": "={{ String($json.error).startsWith('No file') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5d3b9e20-0005-4c2a-9f61-7a8b0c1d0005",
+      "name": "收件箱为空，结束",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        720,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "5d3b9e20-0006-4c2a-9f61-7a8b0c1d0006",
+      "name": "读收件箱出错",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        720,
+        560
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "={{ '读收件箱失败：' + $json.error }}"
+      },
+      "notes": "空收件箱以外的读文件错误（权限、路径）照常让执行失败，交给出错流程。"
+    },
+    {
+      "id": "5d3b9e20-0007-4c2a-9f61-7a8b0c1d0007",
+      "name": "解析 JSON 文件",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        260
+      ],
+      "parameters": {
+        "operation": "fromJson",
+        "binaryPropertyName": "data",
+        "destinationKey": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "5d3b9e20-0008-4c2a-9f61-7a8b0c1d0008",
+      "name": "整理成一段段对话",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// 两个入口的数据形状不同：webhook 收到的在 body 里，收件箱文件解析后在 data 里。\n// 一个请求或文件里可以是单段对话、对话数组，或 {conversations: [...]}。校验交给 Dify 的渲染节点。\nconst out = [];\n$input.all().forEach((item, i) => {\n  const raw = item.json.body ?? item.json.data ?? item.json;\n  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.conversations) ? raw.conversations : [raw];\n  for (const c of list) {\n    out.push({\n      json: {\n        conv_id: String(c?.id ?? ''),\n        customer_name: String(c?.customer_name || '(未提供)'),\n        messages: c?.messages ?? [],\n        note: c?.note ?? '',\n        bottom_lines: c?.bottom_lines ?? '',\n        knowledge: c?.knowledge ?? '',\n      },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;\n"
+      }
+    },
+    {
+      "id": "5d3b9e20-0009-4c2a-9f61-7a8b0c1d0009",
+      "name": "算去重键",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "value": "={{ JSON.stringify([$json.conv_id, $json.customer_name, $json.messages, $json.bottom_lines, $json.note, $json.knowledge]) }}",
+        "dataPropertyName": "conv_key",
+        "encoding": "hex"
+      },
+      "notes": "对话内容（含报价底线、备注）的 SHA-256。来了新消息，键就变，会重新评分。"
+    },
+    {
+      "id": "5d3b9e20-0010-4c2a-9f61-7a8b0c1d0010",
+      "name": "跳过已评过的",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "reply_qc_processed"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "conv_key",
+              "keyValue": "={{ $json.conv_key }}"
+            }
+          ]
+        }
+      },
+      "notes": "已处理表里有这个去重键就丢掉。失败的从不写进已处理表，所以下次会自动重试。"
+    },
+    {
+      "id": "5d3b9e20-0011-4c2a-9f61-7a8b0c1d0011",
+      "name": "调 Dify 评分",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://nginx/v1/workflows/run",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ inputs: { customer_name: $json.customer_name, messages: JSON.stringify($json.messages), note: $json.note, bottom_lines: $json.bottom_lines, knowledge: $json.knowledge }, response_mode: 'blocking', user: 'n8n-reply-qc' }) }}",
+        "options": {
+          "timeout": 120000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 0
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "rqcDifyHeader001",
+          "name": "Dify 回复质检评分 API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput",
+      "notes": "Dify 文档里公开的 Service API，阻塞模式，一次一条。n8n 与 Dify 同在 docker_default 网络，nginx 是 Dify 的入口。"
+    },
+    {
+      "id": "5d3b9e20-0012-4c2a-9f61-7a8b0c1d0012",
+      "name": "整理评分卡",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -120
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "// Dify 阻塞模式返回 data.status（工作流是否跑完）和 data.outputs.result（四个结束节点形状一致）。\nconst src = $('跳过已评过的').item.json;\nconst data = $json.data ?? {};\nconst r = data.outputs?.result ?? {};\nconst status = data.status === 'succeeded' ? (r.status ?? 'unknown') : 'dify_' + (data.status ?? 'error');\nconst replies = r.replies ?? [];\nconst worst = replies.find((x) => x.verdict === 'bad') ?? {};\nconst scores = r.scores ?? {};\nconst detail = r.detail || data.error || '';\nconst LABEL = { ok: '已评分', skipped: '无我方回复', invalid_input: '输入无效' };\n// 飞书多维表格的一行；空值不传，免得数字、日期字段报类型错误\nconst fields = {\n  '对话': `${src.conv_id} · ${src.customer_name}`,\n  '状态': LABEL[status] ?? status,\n  '总分': r.total,\n  '响应及时性': scores.responsiveness,\n  '需求挖掘': scores.discovery,\n  '议价与守底线': scores.negotiation,\n  '风险处理': scores.risk_handling,\n  '专业度': scores.professionalism,\n  '差评条数': replies.filter((x) => x.verdict === 'bad').length,\n  '我方回复数': replies.length,\n  '最该改的一条': worst.moment,\n  '建议说法': worst.reply,\n  '建议说法中文': worst.reply_zh,\n  '评分时间': Date.now(),\n  '提示词版本': r.prompt_version,\n  'Dify运行ID': data.id,\n  '去重键': src.conv_key,\n  '说明': detail,\n};\nreturn {\n  json: {\n    conv_key: src.conv_key,\n    conv_id: src.conv_id,\n    // 结果确定的不再重试；模型失败、解析失败、Dify 出错的不记已处理，下次自动重试\n    done: ['ok', 'skipped', 'invalid_input'].includes(status),\n    status,\n    total: r.total ?? null,\n    detail,\n    feishu_fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined && v !== null && v !== '')),\n  },\n};\n"
+      }
+    },
+    {
+      "id": "5d3b9e20-0013-4c2a-9f61-7a8b0c1d0013",
+      "name": "整理调用失败",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        240
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const errorText = (j) => {\n  if (typeof j.error === 'string') return j.error;\n  const d = j.details ?? {};\n  const b = d.body && typeof d.body === 'object' ? d.body : {};\n  return [d.httpCode, b.code !== undefined ? `code ${b.code}: ${b.msg ?? ''}` : '', d.message ?? j.error?.message]\n    .filter(Boolean).join(' | ');\n};\n// HTTP 层失败（Dify 不通、超时、4xx/5xx），重试后仍失败的走到这里。\nconst src = $('跳过已评过的').item.json;\nreturn {\n  json: {\n    conv_key: src.conv_key,\n    conv_id: src.conv_id,\n    done: false,\n    status: 'dify_unreachable',\n    detail: errorText($json).slice(0, 500),\n  },\n};\n"
+      }
+    },
+    {
+      "id": "5d3b9e20-0014-4c2a-9f61-7a8b0c1d0014",
+      "name": "评分完成了吗",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0e4f1c2a-7b3d-4e5f-9a1b-2c3d4e5f6a7b",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5d3b9e20-0015-4c2a-9f61-7a8b0c1d0015",
+      "name": "取飞书令牌",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2160,
+        -240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "rqcFeishuApp0001",
+          "name": "飞书应用 回复质检"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notes": "app_id、app_secret 由凭据「飞书应用 回复质检」注入请求体，执行记录里会打码。",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "5d3b9e20-0016-4c2a-9f61-7a8b0c1d0016",
+      "name": "写入评分卡",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2400,
+        -240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/bitable/v1/apps/__FEISHU_APP_TOKEN__/tables/__FEISHU_SCORE_TABLE_ID__/records",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.tenant_access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: $('评分完成了吗').item.json.feishu_fields }) }}",
+        "options": {
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
+      "notes": "同一张表不能并发写（飞书 1254291），一条一条写，间隔 0.3 秒。"
+    },
+    {
+      "id": "5d3b9e20-0017-4c2a-9f61-7a8b0c1d0017",
+      "name": "写入成功了吗",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2640,
+        -240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+              "leftValue": "={{ $json.code === 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5d3b9e20-0018-4c2a-9f61-7a8b0c1d0018",
+      "name": "记为已处理",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2880,
+        -340
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "reply_qc_processed"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "conv_key": "={{ $('评分完成了吗').item.json.conv_key }}",
+            "conv_id": "={{ $('评分完成了吗').item.json.conv_id }}",
+            "status": "={{ $('评分完成了吗').item.json.status }}",
+            "total": "={{ $('评分完成了吗').item.json.total }}",
+            "record_id": "={{ $json.data.record.record_id }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "notes": "写进去之后，同样内容的对话不会再评。"
+    },
+    {
+      "id": "5d3b9e20-0019-4c2a-9f61-7a8b0c1d0019",
+      "name": "整理写表失败",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -80
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const errorText = (j) => {\n  if (typeof j.error === 'string') return j.error;\n  const d = j.details ?? {};\n  const b = d.body && typeof d.body === 'object' ? d.body : {};\n  return [d.httpCode, b.code !== undefined ? `code ${b.code}: ${b.msg ?? ''}` : '', d.message ?? j.error?.message]\n    .filter(Boolean).join(' | ');\n};\n// 飞书换令牌或写表失败。HTTP 报错走错误输出（带 error）；业务报错是 HTTP 200 但 code 不为 0。\n// 先看 error：错误输出会并入上一步的字段，换令牌成功留下的 code: 0 也在里面。\nconst src = $('评分完成了吗').item.json;\nconst detail = $json.error !== undefined ? errorText($json) : `code ${$json.code}: ${$json.msg}`;\nreturn {\n  json: { conv_key: src.conv_key, conv_id: src.conv_id, done: false, status: 'feishu_error', detail: String(detail).slice(0, 500) },\n};\n"
+      }
+    },
+    {
+      "id": "5d3b9e20-0020-4c2a-9f61-7a8b0c1d0020",
+      "name": "记下失败",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3120,
+        120
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "reply_qc_errors"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source": "score",
+            "workflow": "={{ $workflow.name }}",
+            "execution_id": "={{ $execution.id }}",
+            "conv_id": "={{ $json.conv_id }}",
+            "conv_key": "={{ $json.conv_key }}",
+            "message": "={{ $json.status + ($json.detail ? ': ' + $json.detail : '') }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "notes": "单条失败不打断其它对话；这些对话没进已处理表，下次触发会重试。"
+    }
+  ],
+  "connections": {
+    "收到对话（webhook）": {
+      "main": [
+        [
+          {
+            "node": "整理成一段段对话",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "每 30 分钟查收件箱": {
+      "main": [
+        [
+          {
+            "node": "读收件箱文件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "读收件箱文件": {
+      "main": [
+        [
+          {
+            "node": "解析 JSON 文件",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "只是收件箱为空吗",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "只是收件箱为空吗": {
+      "main": [
+        [
+          {
+            "node": "收件箱为空，结束",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "读收件箱出错",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析 JSON 文件": {
+      "main": [
+        [
+          {
+            "node": "整理成一段段对话",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "整理成一段段对话": {
+      "main": [
+        [
+          {
+            "node": "算去重键",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "算去重键": {
+      "main": [
+        [
+          {
+            "node": "跳过已评过的",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "跳过已评过的": {
+      "main": [
+        [
+          {
+            "node": "调 Dify 评分",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "调 Dify 评分": {
+      "main": [
+        [
+          {
+            "node": "整理评分卡",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "整理调用失败",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "整理评分卡": {
+      "main": [
+        [
+          {
+            "node": "评分完成了吗",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "评分完成了吗": {
+      "main": [
+        [
+          {
+            "node": "取飞书令牌",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "记下失败",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "取飞书令牌": {
+      "main": [
+        [
+          {
+            "node": "写入评分卡",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "整理写表失败",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "写入评分卡": {
+      "main": [
+        [
+          {
+            "node": "写入成功了吗",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "整理写表失败",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "写入成功了吗": {
+      "main": [
+        [
+          {
+            "node": "记为已处理",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "整理写表失败",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "整理写表失败": {
+      "main": [
+        [
+          {
+            "node": "记下失败",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "整理调用失败": {
+      "main": [
+        [
+          {
+            "node": "记下失败",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "rqcErrorLogger01"
+  },
+  "pinData": {},
+  "active": false
+}

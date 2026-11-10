@@ -1,0 +1,8 @@
+infra/n8n/data/
+infra/n8n/files/
+.env
+.env.*
+!.env.example
+__pycache__/
+.venv/
+.pytest_cache/

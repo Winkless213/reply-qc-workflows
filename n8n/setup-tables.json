@@ -1,0 +1,85 @@
+{
+  "id": "rqcSetupTables01",
+  "name": "回复质检 · 初始化数据表",
+  "nodes": [
+    {
+      "id": "6c1f2a3e-0001-4a51-9d1e-5b0f0c1a0001",
+      "name": "手动运行",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "6c1f2a3e-0004-4a51-9d1e-5b0f0c1a0004",
+      "name": "部署脚本调用",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 200],
+      "webhookId": "4f0d8a52-6a1b-4c3e-9b7d-2e5a1c9f0a11",
+      "notes": "n8n execute 的独立进程不加载数据表模块，所以部署脚本临时发布本工作流、调这个地址一次，再取消发布。",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reply-qc-setup-tables",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "6c1f2a3e-0002-4a51-9d1e-5b0f0c1a0002",
+      "name": "建表：已处理对话",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [240, 0],
+      "notes": "评分成功（或确定无需重试）的对话记一行；下次见到同一个去重键就跳过。失败的不记，下次自动重试。",
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "reply_qc_processed",
+        "columns": {
+          "column": [
+            { "name": "conv_key", "type": "string" },
+            { "name": "conv_id", "type": "string" },
+            { "name": "status", "type": "string" },
+            { "name": "total", "type": "number" },
+            { "name": "record_id", "type": "string" }
+          ]
+        },
+        "options": { "createIfNotExists": true }
+      }
+    },
+    {
+      "id": "6c1f2a3e-0003-4a51-9d1e-5b0f0c1a0003",
+      "name": "建表：错误记录",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [480, 0],
+      "notes": "单条对话评分失败、整次执行失败都记在这里。",
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "reply_qc_errors",
+        "columns": {
+          "column": [
+            { "name": "source", "type": "string" },
+            { "name": "workflow", "type": "string" },
+            { "name": "execution_id", "type": "string" },
+            { "name": "conv_id", "type": "string" },
+            { "name": "conv_key", "type": "string" },
+            { "name": "message", "type": "string" }
+          ]
+        },
+        "options": { "createIfNotExists": true }
+      }
+    }
+  ],
+  "connections": {
+    "手动运行": { "main": [[{ "node": "建表：已处理对话", "type": "main", "index": 0 }]] },
+    "部署脚本调用": { "main": [[{ "node": "建表：已处理对话", "type": "main", "index": 0 }]] },
+    "建表：已处理对话": { "main": [[{ "node": "建表：错误记录", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "active": false
+}

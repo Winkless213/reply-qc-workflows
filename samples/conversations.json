@@ -1,0 +1,83 @@
+[
+  {
+    "id": "c01",
+    "title": "首次询盘，只做自我介绍、不问需求",
+    "customer_name": "Daniel",
+    "messages": [
+      {"ts": "11-03 09:02", "from_me": false, "text": "Hi, I need 2000 pcs stainless steel bottles 500ml. What's your price?"},
+      {"ts": "11-03 09:40", "from_me": true, "text": "Hello dear, thanks for your inquiry! We are a professional manufacturer with 15 years experience. Our quality is very good."},
+      {"ts": "11-03 09:45", "from_me": false, "text": "ok but price?"},
+      {"ts": "11-03 11:30", "from_me": true, "text": "Price depends. Please tell me more."}
+    ]
+  },
+  {
+    "id": "c02",
+    "title": "客户压价，无条件让步",
+    "customer_name": "Ahmed",
+    "bottom_lines": "500ml 保温杯 FOB Ningbo：500-999 件 $3.20；1000-4999 件 $2.95；5000 件以上 $2.80。底线 $2.70，低于底线须主管批准。",
+    "messages": [
+      {"ts": "11-03 14:10", "from_me": false, "text": "Your quote $2.95 for 3000 pcs is too high. Another supplier offers $2.60. Can you match?"},
+      {"ts": "11-03 14:12", "from_me": true, "text": "OK my friend, we can do $2.60 for you."},
+      {"ts": "11-03 14:15", "from_me": false, "text": "Good. And free shipping?"},
+      {"ts": "11-03 14:20", "from_me": true, "text": "Let me check with my boss."}
+    ]
+  },
+  {
+    "id": "c03",
+    "title": "交期延误投诉，处理得当",
+    "customer_name": "Olga",
+    "messages": [
+      {"ts": "11-04 10:01", "from_me": false, "text": "You promised shipment this week. Now you say next week?? My customer is waiting."},
+      {"ts": "11-04 10:06", "from_me": true, "text": "You're right, we said this week and we missed it, that's on us. 1200 pcs are ready now; I can air-ship those tomorrow and send the rest by sea on the 18th. Would that cover your customer's first delivery?"},
+      {"ts": "11-04 10:15", "from_me": false, "text": "Air for 1200 is ok. Who pays the air freight?"},
+      {"ts": "11-04 10:19", "from_me": true, "text": "We cover the air freight difference since the delay is ours. I'll send the revised PI today."}
+    ]
+  },
+  {
+    "id": "c04",
+    "title": "纯应答，不该硬挑毛病",
+    "customer_name": "Maria",
+    "messages": [
+      {"ts": "11-04 16:30", "from_me": false, "text": "Please send the invoice with 10 days delivery."},
+      {"ts": "11-04 16:32", "from_me": true, "text": "Sure, will send today."}
+    ]
+  },
+  {
+    "id": "c05",
+    "title": "西语客户，我方用英语且只答不问",
+    "customer_name": "Lucía",
+    "messages": [
+      {"ts": "11-05 08:20", "from_me": false, "text": "Hola, necesito 500 botellas de 750ml con logo. ¿Cuál es el precio y el plazo de entrega?"},
+      {"ts": "11-05 09:55", "from_me": true, "text": "Hello, price is $3.5. Delivery 30 days."},
+      {"ts": "11-05 10:02", "from_me": false, "text": "¿El precio incluye el logo? ¿Y el envío a Valencia?"},
+      {"ts": "11-05 12:40", "from_me": true, "text": "Logo is extra. Shipping not included."}
+    ]
+  },
+  {
+    "id": "c06",
+    "title": "消息里带电话、邮箱、卡号，检验脱敏",
+    "customer_name": "Carlos",
+    "messages": [
+      {"ts": "11-05 15:00", "from_me": false, "text": "Please call me at +34 612 345 678 or email carlos.demo@example.com. I can pay to card 4111 1111 1111 1111 if needed. I want 10000 pcs."},
+      {"ts": "11-05 15:04", "from_me": true, "text": "Thanks. For safety we only accept T/T to our company account, never card numbers in chat. Could you confirm the destination port so I can prepare the PI for 10000 pcs?"}
+    ]
+  },
+  {
+    "id": "c07",
+    "title": "只有客户消息，没有我方回复",
+    "customer_name": "Ivan",
+    "messages": [
+      {"ts": "11-06 09:00", "from_me": false, "text": "Hello?"},
+      {"ts": "11-06 09:30", "from_me": false, "text": "Anyone there? I need a quote for 3000 pcs."}
+    ]
+  },
+  {
+    "id": "c08",
+    "title": "可疑付款方式，我方没有警觉",
+    "customer_name": "John",
+    "messages": [
+      {"ts": "11-06 11:10", "from_me": false, "text": "I am serious buyer. I pay today by Western Union to your personal account, give me 10000 pcs now, ship fast fast."},
+      {"ts": "11-06 11:12", "from_me": true, "text": "Great!! Please send payment to my personal account, I will ship immediately."}
+    ]
+  }
+]

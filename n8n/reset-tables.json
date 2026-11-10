@@ -1,0 +1,63 @@
+{
+  "id": "rqcResetTables01",
+  "name": "回复质检 · 清空数据表",
+  "nodes": [
+    {
+      "id": "9b2e4d6f-0001-4c83-a1f5-3d7e9b0c0001",
+      "name": "手动运行",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "9b2e4d6f-0004-4c83-a1f5-3d7e9b0c0004",
+      "name": "部署脚本调用",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 200],
+      "webhookId": "c3a7e1f9-2b4d-4e6a-8c0f-5d9b7a3e1c22",
+      "notes": "演示前重置用：部署脚本（--reset-tables）临时发布本工作流、调这个地址一次，再取消发布。",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reply-qc-reset-tables",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "9b2e4d6f-0002-4c83-a1f5-3d7e9b0c0002",
+      "name": "清空：已处理对话",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [240, 0],
+      "notes": "清空后，所有对话下次都会重新评分。",
+      "parameters": {
+        "resource": "table",
+        "operation": "clear",
+        "dataTableId": { "__rl": true, "mode": "name", "value": "reply_qc_processed" }
+      }
+    },
+    {
+      "id": "9b2e4d6f-0003-4c83-a1f5-3d7e9b0c0003",
+      "name": "清空：错误记录",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [480, 0],
+      "parameters": {
+        "resource": "table",
+        "operation": "clear",
+        "dataTableId": { "__rl": true, "mode": "name", "value": "reply_qc_errors" }
+      }
+    }
+  ],
+  "connections": {
+    "手动运行": { "main": [[{ "node": "清空：已处理对话", "type": "main", "index": 0 }]] },
+    "部署脚本调用": { "main": [[{ "node": "清空：已处理对话", "type": "main", "index": 0 }]] },
+    "清空：已处理对话": { "main": [[{ "node": "清空：错误记录", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "active": false
+}

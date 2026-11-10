@@ -1,0 +1,13 @@
+在 Dify 画布上点“测试运行”后，把下面三段分别粘进对应的输入框。
+样本：c02（客户压价，无条件让步）。对话是自己编的，不是真实客户。
+
+===== 客户名称 =====
+Ahmed
+
+===== 对话记录（JSON 数组）：下面一整行 =====
+[{"ts": "11-03 14:10", "from_me": false, "text": "Your quote $2.95 for 3000 pcs is too high. Another supplier offers $2.60. Can you match?"}, {"ts": "11-03 14:12", "from_me": true, "text": "OK my friend, we can do $2.60 for you."}, {"ts": "11-03 14:15", "from_me": false, "text": "Good. And free shipping?"}, {"ts": "11-03 14:20", "from_me": true, "text": "Let me check with my boss."}]
+
+===== 公司报价底线 =====
+500ml 保温杯 FOB Ningbo：500-999 件 $3.20；1000-4999 件 $2.95；5000 件以上 $2.80。底线 $2.70，低于底线须主管批准。
+
+“客户备注”和“公司知识库条目”留空。

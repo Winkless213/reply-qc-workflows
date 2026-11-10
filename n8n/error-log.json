@@ -1,0 +1,107 @@
+{
+  "id": "rqcErrorLogger01",
+  "name": "回复质检 · 出错记录",
+  "nodes": [
+    {
+      "id": "8a2e7c10-0001-4f3b-8c55-1d9e3a7b0001",
+      "name": "有工作流执行失败",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "notes": "评分入表、每日汇总两个工作流的设置里都指定了本工作流为出错流程。",
+      "parameters": {}
+    },
+    {
+      "id": "8a2e7c10-0002-4f3b-8c55-1d9e3a7b0002",
+      "name": "记进错误表",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [240, 0],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": { "__rl": true, "mode": "name", "value": "reply_qc_errors" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source": "execution",
+            "workflow": "={{ $json.workflow.name }}",
+            "execution_id": "={{ $json.execution.id || '' }}",
+            "conv_id": "",
+            "conv_key": "",
+            "message": "={{ ($json.execution.lastNodeExecuted ? '[' + $json.execution.lastNodeExecuted + '] ' : '') + (($json.execution.error && $json.execution.error.message) || '') }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8a2e7c10-0004-4f3b-8c55-1d9e3a7b0004",
+      "name": "取飞书令牌",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [480, 0],
+      "notes": "app_id、app_secret 由凭据「飞书应用 回复质检」注入请求体，执行记录里会打码。",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": { "httpCustomAuth": { "id": "rqcFeishuApp0001", "name": "飞书应用 回复质检" } },
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": { "timeout": 20000 }
+      }
+    },
+    {
+      "id": "8a2e7c10-0003-4f3b-8c55-1d9e3a7b0003",
+      "name": "推送到群",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [720, 0],
+      "notes": "以应用身份发到应用机器人所在的群，群 ID 部署时从 .env 填入。uuid 取执行 ID，重试不会重复发。",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.tenant_access_token }}" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ receive_id: '__FEISHU_CHAT_ID__', msg_type: 'text', uuid: 'rqc-' + $execution.id, content: JSON.stringify({ text: ['回复质检 · 出错提醒', '工作流：' + $('有工作流执行失败').first().json.workflow.name, '出错节点：' + ($('有工作流执行失败').first().json.execution.lastNodeExecuted || '-'), '错误：' + (($('有工作流执行失败').first().json.execution.error || {}).message || '-'), '执行记录：' + ($('有工作流执行失败').first().json.execution.url || '-')].join('\\n') }) }) }}",
+        "options": { "timeout": 20000 }
+      }
+    },
+    {
+      "id": "8a2e7c10-0005-4f3b-8c55-1d9e3a7b0005",
+      "name": "检查飞书返回",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// 飞书业务报错时 code 不为 0；这里让执行失败，在 n8n 执行列表里留下记录。\nconst r = $input.first().json;\nif (r.code !== 0) throw new Error(`推送到群失败 code ${r.code}: ${r.msg}`);\nreturn $input.all();\n"
+      }
+    }
+  ],
+  "connections": {
+    "有工作流执行失败": { "main": [[{ "node": "记进错误表", "type": "main", "index": 0 }]] },
+    "记进错误表": { "main": [[{ "node": "取飞书令牌", "type": "main", "index": 0 }]] },
+    "取飞书令牌": { "main": [[{ "node": "推送到群", "type": "main", "index": 0 }]] },
+    "推送到群": { "main": [[{ "node": "检查飞书返回", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "active": false
+}

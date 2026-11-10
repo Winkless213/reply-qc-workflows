@@ -1,0 +1,35 @@
+name: reply-qc
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.40.6@sha256:9c7871d5cc4fc2565bb905e4df5bf7d6a5a4bf2f4313fb99a2b3fa380f331d7c
+    restart: "no"
+    ports:
+      - "127.0.0.1:5679:5678"
+    environment:
+      TZ: Asia/Shanghai
+      GENERIC_TIMEZONE: Asia/Shanghai
+      N8N_HOST: localhost
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://localhost:5679
+      WEBHOOK_URL: http://localhost:5679/
+      N8N_DIAGNOSTICS_ENABLED: "false"
+    volumes:
+      - ./data:/home/node/.n8n
+      # n8n 2.x file nodes may only touch ~/.n8n-files: inbox/ for conversations, reports/ for daily summaries.
+      - ./files:/home/node/.n8n-files
+    networks:
+      - default
+      - dify
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5678/healthz/readiness').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+
+networks:
+  # Dify's compose network, so workflows reach the Dify API at http://nginx/v1. Start Dify first.
+  dify:
+    external: true
+    name: docker_default

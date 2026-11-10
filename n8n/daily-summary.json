@@ -1,0 +1,405 @@
+{
+  "id": "rqcDailySummary1",
+  "name": "回复质检 · 每日汇总",
+  "nodes": [
+    {
+      "id": "7e4c0f31-0001-4c2a-9f61-7a8b0c1d0001",
+      "name": "每天 18:07",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 18,
+              "triggerAtMinute": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7e4c0f31-0002-4c2a-9f61-7a8b0c1d0002",
+      "name": "手动触发（webhook）",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        220
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reply-qc-daily",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryJson",
+        "options": {}
+      },
+      "webhookId": "9c8d7e6f-5a4b-4c3d-8e2f-1a0b9c8d7e6f",
+      "notes": "演示或补发用：POST 一下立刻出今天的汇总，返回汇总内容。"
+    },
+    {
+      "id": "7e4c0f31-0003-4c2a-9f61-7a8b0c1d0003",
+      "name": "取飞书令牌",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "rqcFeishuApp0001",
+          "name": "飞书应用 回复质检"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notes": "app_id、app_secret 由凭据「飞书应用 回复质检」注入请求体，执行记录里会打码。"
+    },
+    {
+      "id": "7e4c0f31-0004-4c2a-9f61-7a8b0c1d0004",
+      "name": "查今天的评分卡",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/bitable/v1/apps/__FEISHU_APP_TOKEN__/tables/__FEISHU_SCORE_TABLE_ID__/records/search?page_size=500",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.tenant_access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filter: { conjunction: 'and', conditions: [{ field_name: '评分时间', operator: 'is', value: ['Today'] }] }, automatic_fields: false }) }}",
+        "options": {
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 0
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "7e4c0f31-0005-4c2a-9f61-7a8b0c1d0005",
+      "name": "查失败记录",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "reply_qc_errors"
+        },
+        "matchType": "anyCondition",
+        "filters": {},
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "notes": "错误表一般很小，全取回来在下一步按今天的时间过滤。"
+    },
+    {
+      "id": "7e4c0f31-0006-4c2a-9f61-7a8b0c1d0006",
+      "name": "算汇总",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// 汇总今天写进「评分卡」的记录，加上 n8n 错误表里今天的失败次数。\nconst tz = 'Asia/Shanghai';\nconst now = $now.setZone(tz);\nconst today = now.toFormat('yyyy-MM-dd');\nconst startMs = now.startOf('day').toMillis();\nconst res = $('查今天的评分卡').first().json;\nif (res.code !== 0) throw new Error(`查评分卡失败 code ${res.code}: ${res.msg}`);\n// 文本字段查出来是 [{text, type}] 片段数组\nconst text = (v) => (Array.isArray(v) ? v.map((s) => s.text ?? '').join('') : v ?? '');\nconst rows = (res.data?.items ?? []).map((it) => it.fields);\nconst scored = rows.filter((f) => typeof f['总分'] === 'number');\nconst avg = scored.length ? scored.reduce((s, f) => s + f['总分'], 0) / scored.length : null;\nconst low = scored.filter((f) => f['总分'] < 60).length;\nconst bad = rows.reduce((s, f) => s + (f['差评条数'] ?? 0), 0);\nconst worst = [...scored].sort((a, b) => a['总分'] - b['总分'])[0];\nconst failures = $input.all().filter((i) => i.json.createdAt && new Date(i.json.createdAt).getTime() >= startMs).length;\nconst lines = [\n  `回复质检 · 每日汇总 ${today}`,\n  `评分 ${scored.length} 段对话` + (avg === null ? '' : `，平均 ${avg.toFixed(1)} 分，低于 60 分的 ${low} 段`),\n  `差评回复 ${bad} 条；评分失败 ${failures} 次` + (res.data?.has_more ? '（今天超过 500 条，只统计了前 500 条）' : ''),\n];\nif (worst) lines.push(`最低分：${text(worst['对话'])}，${worst['总分']} 分。最该改：${text(worst['最该改的一条'])}`);\nlines.push('明细见飞书多维表格「评分卡」。');\nconst summary = lines.join('\\n');\nconst fields = {\n  '日期': today,\n  '评分条数': scored.length,\n  '平均总分': avg === null ? undefined : Math.round(avg * 10) / 10,\n  '低于60分': low,\n  '差评条数': bad,\n  '失败条数': failures,\n  '最低分对话': worst ? text(worst['对话']) : undefined,\n  '汇总': summary,\n  '生成时间': Date.now(),\n};\nreturn [{\n  json: {\n    date: today,\n    summary,\n    markdown: `# ${lines[0]}\\n\\n` + lines.slice(1).map((l) => `- ${l}`).join('\\n') + '\\n',\n    daily_fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)),\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "7e4c0f31-0007-4c2a-9f61-7a8b0c1d0007",
+      "name": "生成 Markdown",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        100
+      ],
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "markdown",
+        "binaryPropertyName": "data",
+        "options": {
+          "fileName": "={{ $json.date }}.md"
+        }
+      }
+    },
+    {
+      "id": "7e4c0f31-0008-4c2a-9f61-7a8b0c1d0008",
+      "name": "存到 reports",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        100
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/reports/{{ $('算汇总').first().json.date }}.md",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "notes": "对应宿主机 infra/n8n/files/reports/，同一天重跑会覆盖。"
+    },
+    {
+      "id": "7e4c0f31-0009-4c2a-9f61-7a8b0c1d0009",
+      "name": "写入每日汇总",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1680,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/bitable/v1/apps/__FEISHU_APP_TOKEN__/tables/__FEISHU_DAILY_TABLE_ID__/records",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('取飞书令牌').first().json.tenant_access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: $('算汇总').first().json.daily_fields }) }}",
+        "options": {
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 0
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "7e4c0f31-0010-4c2a-9f61-7a8b0c1d0010",
+      "name": "推送到群",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1920,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('取飞书令牌').first().json.tenant_access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ receive_id: '__FEISHU_CHAT_ID__', msg_type: 'text', uuid: 'rqc-' + $execution.id, content: JSON.stringify({ text: $('算汇总').first().json.summary }) }) }}",
+        "options": {
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 0
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notes": "以应用身份发到应用机器人所在的群，群 ID 部署时从 .env 填入。uuid 取执行 ID，重试不会重复发。"
+    },
+    {
+      "id": "7e4c0f31-0011-4c2a-9f61-7a8b0c1d0011",
+      "name": "检查飞书返回",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// 飞书接口出错时也返回 HTTP 200，只在 code 里报错；这里不为 0 就让整次执行失败，交给出错流程。\nfor (const name of ['写入每日汇总', '推送到群']) {\n  const r = $(name).first().json;\n  if (r.code !== 0) throw new Error(`${name}失败 code ${r.code}: ${r.msg}`);\n}\nreturn $('算汇总').all();\n"
+      }
+    }
+  ],
+  "connections": {
+    "每天 18:07": {
+      "main": [
+        [
+          {
+            "node": "取飞书令牌",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "手动触发（webhook）": {
+      "main": [
+        [
+          {
+            "node": "取飞书令牌",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "取飞书令牌": {
+      "main": [
+        [
+          {
+            "node": "查今天的评分卡",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查今天的评分卡": {
+      "main": [
+        [
+          {
+            "node": "查失败记录",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查失败记录": {
+      "main": [
+        [
+          {
+            "node": "算汇总",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "算汇总": {
+      "main": [
+        [
+          {
+            "node": "生成 Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "生成 Markdown": {
+      "main": [
+        [
+          {
+            "node": "存到 reports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "存到 reports": {
+      "main": [
+        [
+          {
+            "node": "写入每日汇总",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "写入每日汇总": {
+      "main": [
+        [
+          {
+            "node": "推送到群",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "推送到群": {
+      "main": [
+        [
+          {
+            "node": "检查飞书返回",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "rqcErrorLogger01"
+  },
+  "pinData": {},
+  "active": false
+}
