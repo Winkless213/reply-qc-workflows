@@ -1,0 +1,88 @@
+identity:
+  author: winkless213
+  name: render_conversation
+  label:
+    en_US: Render Conversation
+    zh_Hans: 渲染与脱敏
+description:
+  human:
+    en_US: Parse a WhatsApp conversation (JSON array), mask contact details, number our replies and build the context for the scoring model. guard tells whether to call the model.
+    zh_Hans: 解析对话 JSON，电话/邮箱/卡号脱敏，我方回复编号，拼成给评分模型的上下文。guard 表示要不要调模型。
+  llm: Turn a conversation given as a JSON array of {ts, from_me, text} into the scoring context. Contact details are masked and our replies are numbered. guard is ok, empty (no reply from our side) or invalid.
+parameters:
+  - name: customer_name
+    type: string
+    required: false
+    label:
+      en_US: Customer name
+      zh_Hans: 客户名称
+    human_description:
+      en_US: Customer name
+      zh_Hans: 客户名称
+    llm_description: The customer's name.
+    form: llm
+  - name: messages
+    type: string
+    required: true
+    label:
+      en_US: Messages (JSON array)
+      zh_Hans: 对话记录（JSON 数组）
+    human_description:
+      en_US: 'JSON array of messages: {"ts": "11-05 15:00", "from_me": false, "text": "..."}'
+      zh_Hans: '消息的 JSON 数组：{"ts": "11-05 15:00", "from_me": false, "text": "..."}'
+    llm_description: 'JSON array of messages, each {"ts": string, "from_me": boolean, "text": string}.'
+    form: llm
+  - name: note
+    type: string
+    required: false
+    label:
+      en_US: Customer note
+      zh_Hans: 客户备注
+    human_description:
+      en_US: Customer note
+      zh_Hans: 客户备注
+    llm_description: Notes about the customer.
+    form: llm
+  - name: bottom_lines
+    type: string
+    required: false
+    label:
+      en_US: Price floors
+      zh_Hans: 公司报价底线
+    human_description:
+      en_US: The company's lowest acceptable prices and terms
+      zh_Hans: 公司报价底线
+    llm_description: The company's lowest acceptable prices and terms.
+    form: llm
+  - name: knowledge
+    type: string
+    required: false
+    label:
+      en_US: Knowledge base entries
+      zh_Hans: 公司知识库条目
+    human_description:
+      en_US: Company knowledge base entries
+      zh_Hans: 公司知识库条目
+    llm_description: Company knowledge base entries.
+    form: llm
+output_schema:
+  type: object
+  properties:
+    guard:
+      type: string
+      description: ok, empty (no reply from our side, skip the model) or invalid
+    detail:
+      type: string
+      description: Why the input was skipped or rejected
+    context:
+      type: string
+      description: The context for the scoring model, at most 6500 characters
+    my_reply_count:
+      type: number
+      description: How many replies are from our side
+    masked_count:
+      type: number
+      description: How many contact details were masked
+extra:
+  python:
+    source: tools/render_conversation.py
