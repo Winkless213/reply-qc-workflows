@@ -1,0 +1,54 @@
+identity:
+  author: winkless213
+  name: validate_scorecard
+  label:
+    en_US: Validate Scorecard
+    zh_Hans: 校验与钳制
+description:
+  human:
+    en_US: Parse the scoring model's output, clamp out-of-range scores, cut over-long texts at a sentence end, drop invalid or invented per-reply verdicts, and count every change.
+    zh_Hans: 解析评分模型的输出，钳制越界分数，超长文本截到上限内的句末，丢弃非法或多造的逐条评级，并计数。
+  llm: Validate a scorecard JSON produced by the scoring model and return a cleaned scorecard with status ok or unparseable.
+parameters:
+  - name: raw
+    type: string
+    required: true
+    label:
+      en_US: Model output
+      zh_Hans: 模型输出
+    human_description:
+      en_US: Text returned by the scoring model
+      zh_Hans: 评分模型返回的文本
+    llm_description: The raw text returned by the scoring model.
+    form: llm
+  - name: my_reply_count
+    type: number
+    required: true
+    label:
+      en_US: Our reply count
+      zh_Hans: 我方回复条数
+    human_description:
+      en_US: Verdicts numbered above this are dropped
+      zh_Hans: 编号超过这个数的逐条评级会被丢弃
+    llm_description: How many replies are from our side.
+    form: llm
+  - name: prompt_version
+    type: string
+    required: false
+    label:
+      en_US: Prompt version
+      zh_Hans: 提示词版本
+    human_description:
+      en_US: Copied into the scorecard to trace which prompt produced it
+      zh_Hans: 写进评分卡，用来追溯是哪版提示词打的分
+    llm_description: The scoring prompt version.
+    form: llm
+output_schema:
+  type: object
+  properties:
+    result:
+      type: object
+      description: 'Scorecard: status, prompt_version, total, scores, replies, dropped_replies, clamped, detail'
+extra:
+  python:
+    source: tools/validate_scorecard.py

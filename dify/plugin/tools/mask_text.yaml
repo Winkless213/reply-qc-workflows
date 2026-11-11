@@ -1,0 +1,35 @@
+identity:
+  author: winkless213
+  name: mask_text
+  label:
+    en_US: Mask Contact Details
+    zh_Hans: 脱敏
+description:
+  human:
+    en_US: Replace phone numbers, emails and bank card numbers with numbered placeholders such as [PHONE_1]. Quantities and dates stay as they are.
+    zh_Hans: 把电话、邮箱、银行卡号换成 [PHONE_1] 这样的编号占位符，数量和日期不动。
+  llm: Mask phone numbers, email addresses and bank card numbers in a text with numbered placeholders such as [PHONE_1]. Returns the masked text and how many items were masked.
+parameters:
+  - name: text
+    type: string
+    required: true
+    label:
+      en_US: Text
+      zh_Hans: 文本
+    human_description:
+      en_US: Text to mask
+      zh_Hans: 要脱敏的文本
+    llm_description: The text to mask.
+    form: llm
+output_schema:
+  type: object
+  properties:
+    masked_text:
+      type: string
+      description: The text with placeholders
+    masked_count:
+      type: number
+      description: How many items were masked
+extra:
+  python:
+    source: tools/mask_text.py

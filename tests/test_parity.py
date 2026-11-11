@@ -1,15 +1,23 @@
-"""Deterministic steps must behave the same in the code version and in the Dify code nodes."""
+"""Deterministic steps must behave the same in the code version, the Dify code nodes and the Dify plugin tools."""
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
+from dify_plugin import Tool
+from dify_plugin.core.utils.class_loader import load_single_subclass_from_source
+from dify_plugin.entities.tool import ToolInvokeMessage
 
 ROOT = Path(__file__).resolve().parent.parent
 DSL = ROOT / "dify" / "reply-qc-score.yml"
+PLUGIN = ROOT / "dify" / "plugin"
 VERSION = "score-v5"
+
+# The plugin runtime starts in the plugin root, which is how the tools import qc_steps
+sys.path.insert(0, str(PLUGIN))
 
 
 def _code_impl():
@@ -31,28 +39,70 @@ def _dify_node(node_id):
     return scope
 
 
+def _render_inputs(conv):
+    """The workflow's start variables: messages arrive as JSON text."""
+    return {
+        "customer_name": conv.get("customer_name"),
+        "note": conv.get("note"),
+        "messages": json.dumps(conv["messages"], ensure_ascii=False) if "messages" in conv else conv.get("raw_messages"),
+        "bottom_lines": conv.get("bottom_lines"),
+        "knowledge": conv.get("knowledge"),
+    }
+
+
 def _dify_impl():
     render, validate = _dify_node("n_render"), _dify_node("n_validate")
-
-    def run_render(conv):
-        return render["main"](
-            conv.get("customer_name"),
-            conv.get("note"),
-            json.dumps(conv["messages"], ensure_ascii=False) if "messages" in conv else conv.get("raw_messages"),
-            conv.get("bottom_lines"),
-            conv.get("knowledge"),
-        )
-
     return {
         "mask": render["mask_text"],
-        "render": run_render,
+        "render": lambda conv: render["main"](**_render_inputs(conv)),
         "validate": lambda raw, n: validate["main"](raw, n, VERSION)["result"],
     }
 
 
-@pytest.fixture(params=["code", "dify"])
+def _plugin_tool(name):
+    """Load a tool the way the plugin runtime does and return a function that yields its output variables."""
+    spec = yaml.safe_load((PLUGIN / "tools" / (name + ".yaml")).read_text(encoding="utf-8"))
+    cls = load_single_subclass_from_source(
+        module_name="tools." + name, script_path=str(PLUGIN / spec["extra"]["python"]["source"]), parent_type=Tool
+    )
+    declared_inputs = {p["name"] for p in spec["parameters"]}
+    declared_outputs = set(spec["output_schema"]["properties"])
+
+    def run(**params):
+        # Dify passes only declared parameters and exposes only variables declared in output_schema
+        assert set(params) <= declared_inputs
+        messages = list(cls.from_credentials({}).invoke(params))
+        variables = {
+            m.message.variable_name: m.message.variable_value
+            for m in messages
+            if m.type == ToolInvokeMessage.MessageType.VARIABLE
+        }
+        assert set(variables) == declared_outputs
+        return variables
+
+    return run
+
+
+def _plugin_impl():
+    mask, render, validate = (_plugin_tool(n) for n in ("mask_text", "render_conversation", "validate_scorecard"))
+
+    def run_mask(text):
+        out = mask(text=text)
+        return out["masked_text"], out["masked_count"]
+
+    return {
+        "mask": run_mask,
+        "render": lambda conv: render(**_render_inputs(conv)),
+        "validate": lambda raw, n: validate(raw=raw, my_reply_count=n, prompt_version=VERSION)["result"],
+    }
+
+
+IMPLS = {"code": _code_impl, "dify": _dify_impl, "plugin": _plugin_impl}
+
+
+@pytest.fixture(params=list(IMPLS))
 def impl(request):
-    return _code_impl() if request.param == "code" else _dify_impl()
+    return IMPLS[request.param]()
 
 
 def msg(from_me, text, ts="11-03 09:00"):

@@ -1,0 +1,19 @@
+identity:
+  author: winkless213
+  name: reply_qc
+  label:
+    en_US: Reply QC Tools
+    zh_Hans: 回复质检工具
+  description:
+    en_US: The steps of reply quality scoring that need no model call - masking, context rendering and scorecard validation.
+    zh_Hans: 回复质检里不调模型的步骤：脱敏、渲染上下文、校验评分卡。
+  icon: icon.svg
+  tags:
+    - utilities
+tools:
+  - tools/mask_text.yaml
+  - tools/render_conversation.yaml
+  - tools/validate_scorecard.yaml
+extra:
+  python:
+    source: provider/reply_qc.py
