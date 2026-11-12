@@ -16,9 +16,9 @@
 flowchart LR
     IN[对话 JSON] -->|webhook 或收件箱| S[n8n 评分入表]
     S <-->|去重后调 API| D[Dify 评分工作流]
-    S --> C[(飞书「评分卡」)]
+    S --> C[("飞书「评分卡」")]
     C --> DAY[n8n 每日汇总]
-    DAY --> SUM[(飞书「每日汇总」)]
+    DAY --> SUM[("飞书「每日汇总」")]
     DAY --> G[飞书群]
     S -.->|执行失败| E[n8n 出错记录]
     DAY -.->|执行失败| E
